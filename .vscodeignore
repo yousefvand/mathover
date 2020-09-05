@@ -1,0 +1,10 @@
+tsconfig.json
+# node_modules/**
+tslint.json
+publish.sh
+.gitignore
+.vscode/**
+assets/**
+**/*.map
+**/*.ts
+src/**
