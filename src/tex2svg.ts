@@ -1,7 +1,7 @@
 import config from "./config";
 import * as vscode from "vscode";
-import * as MathJax from "mathjax-node";
-import DataURIParser = require("datauri/parser");
+import MathJax from "mathjax-node";
+import DataURIParser from "datauri/parser";
 import { LRUCache } from "./cache";
 
 type renderResult = {
