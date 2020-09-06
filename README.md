@@ -18,4 +18,24 @@ Default pattern looks for `# Math: ` and interprets whatever after it as **math*
 
 ![Demo](images/demo.gif)
 
+## Installing from source
+
+You need to have [git](https://git-scm.com/) and [node.js](https://nodejs.org/) installed. Go to your vscode extension path:
+
+- Windows `%USERPROFILE%\.vscode\extensions`
+- macOS `~/.vscode/extensions`
+- Linux `~/.vscode/extensions` (OSS: `~/.vscode-oss/extensions`)
+
+Make sure extension is not already there (`remisa.mathover-{version}`). Close vscode before running following commands:
+
+```bash
+# Assuming current path is: ~/.vscode/extensions
+git clone https://github.com/yousefvand/mathover.git
+cd mathover
+npm i
+npm run compile
+```
+
+Open vscode and extension is installed (see [#1](https://github.com/yousefvand/mathover/issues/1)).
+
 ### [Change History](CHANGELOG.md)

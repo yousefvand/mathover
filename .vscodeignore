@@ -1,10 +1,11 @@
-tsconfig.json
-# node_modules/**
-tslint.json
-publish.sh
-.gitignore
 .vscode/**
 assets/**
+src/**
+.eslintrc.js
+.gitignore
+publish.sh
+tsconfig.json
+# node_modules/**
+# tslint.json
 **/*.map
 **/*.ts
-src/**
