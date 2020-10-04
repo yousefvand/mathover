@@ -1,14 +1,19 @@
 {
     "editor.insertSpaces": false,
     "cSpell.words": [
+        "Builtins",
         "Remisa",
         "USERPROFILE",
         "Xplain",
         "darkblue",
         "datauri",
+        "esnext",
+        "iife",
+        "jsnext",
         "lightblue",
         "mathjax",
         "mathover",
+        "sourcemap",
         "yousefvand"
     ]
 }

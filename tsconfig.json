@@ -1,18 +1,13 @@
 {
-	"compilerOptions": {
-		"module": "commonjs",
-		"target": "es2019",
-		"esModuleInterop": true,
-		"lib": [
-			"ES2019"
-		],
-		"outDir": "out",
-		"sourceMap": true,
-		"strict": true,
-		"rootDir": "src"
-	},
-	"exclude": [
-		"node_modules",
-		".vscode-test"
-	]
+  "compilerOptions": {
+    "module": "es2015",
+    "target": "esnext",
+    "sourceMap": true,
+    // "forceConsistentCasingInFileNames": true,
+    // "importHelpers": true,
+    // "allowSyntheticDefaultImports": true,
+    // "esModuleInterop": true,
+    "rootDir": "src"
+  },
+  "exclude": ["node_modules", ".vscode-test"]
 }
