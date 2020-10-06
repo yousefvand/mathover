@@ -14,7 +14,7 @@ export default {
   input: "src/extension.ts",
   output: {
     sourcemap: true,
-    format: "umd",
+    format: "cjs",
     name: "mathover",
     file: "out/bundle.js",
     external: ["vscode"],
@@ -22,16 +22,10 @@ export default {
   plugins: [
     typescript(),
     json(),
-    resolve({
-      browser: true,
-      jsnext: true,
-      preferBuiltins: true,
-    }),
-    commonjs({
-      transformMixedEsModules: true,
-    }),
-    globals(),
-    builtins(),
+    resolve({ preferBuiltins: true }),
+    commonjs(),
+    // globals(),
+    // builtins(),
     production && terser(),
   ],
 };
