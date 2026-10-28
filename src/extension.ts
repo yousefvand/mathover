@@ -1,69 +1,149 @@
 import config from "./config";
 import * as vscode from "vscode";
 import { Tex2Svg } from "./tex2svg";
+import { expectsSemanticTokens, getMatchableSegments, giveUpSemanticTokens } from "./scope";
 
-export function activate(context: vscode.ExtensionContext) {
+// wait and poll for semantic tokens to update for slow starting language server
+const TOKEN_POLL_INTERVAL = 1000;
+const TOKEN_HOLD_MS = 10_000;
+const TOKEN_POLL_MS = 60_000;
 
-	const matchRegEx = new RegExp(config.matchReg, config.matchRegFlags);
-	const wrongRegEx = new RegExp(config.wrongReg, config.wrongRegFlags);
+let tex2Svg: Tex2Svg;
+let timeout: ReturnType<typeof setTimeout> | undefined;
+let tokenWait: { uri: string; since: number } | undefined;
 
-	const tex2Svg = new Tex2Svg(config.cacheSize);
-	let timeout: NodeJS.Timer | undefined = undefined;
-	let activeEditor = vscode.window.activeTextEditor;
+function createTex2Svg(): Tex2Svg {
+	return new Tex2Svg(config.cacheSize);
+}
 
-	async function updateDecorations() {
-		if (!activeEditor) {
+function clearDecorations(editor: vscode.TextEditor) {
+	editor.setDecorations(config.wrongDecorationType, []);
+	editor.setDecorations(config.correctDecorationType, []);
+}
+
+// TODO: experimental
+function inlineRenderOptions(hoverMarkdown: string, endCol: number): vscode.DecorationInstanceRenderOptions | undefined {
+	const dataUri = hoverMarkdown.match(/!\[\]\((.+)\)/)?.[1];
+	if (!dataUri) {
+		return undefined;
+	}
+	const padCols = Math.max(2, 30 - endCol);
+	return {
+		after: {
+			contentIconPath: vscode.Uri.parse(dataUri),
+			margin: `0 0 0 ${padCols}ch`,
+			// only way is as css string
+			textDecoration: "none; padding: 0 0 1ex 0",
+		},
+	};
+}
+
+async function updateDecorations() {
+	const activeEditor = vscode.window.activeTextEditor;
+	if (!activeEditor) {
+		return;
+	}
+	const document = activeEditor.document;
+
+	if (config.disabledLanguages.includes(document.languageId)) {
+		clearDecorations(activeEditor);
+		return;
+	}
+
+	let segments = await getMatchableSegments(document);
+	if (segments) {
+		tokenWait = undefined;
+	} else {
+		const uri = document.uri.toString();
+		if (tokenWait?.uri !== uri) {
+			tokenWait = { uri, since: Date.now() };
+		}
+		const elapsed = Date.now() - tokenWait.since;
+		if (elapsed < TOKEN_POLL_MS) {
+			scheduleUpdate(TOKEN_POLL_INTERVAL);
+		}
+		if (elapsed >= TOKEN_HOLD_MS) {
+			giveUpSemanticTokens(document.languageId);
+		} else if (expectsSemanticTokens(document.languageId)) {
+			clearDecorations(activeEditor);
 			return;
 		}
-		const text = activeEditor.document.getText();
-		const wrongUsage: vscode.DecorationOptions[] = [];
-		const correctUsage: vscode.DecorationOptions[] = [];
-		let match;
-		while ((match = matchRegEx.exec(text))) {
-			const start = match.index + config.forwardSkip;
-			const end = match.index + match[0].length - config.backwardSkip;
-			const startPos = activeEditor.document.positionAt(start);
-			const endPos = activeEditor.document.positionAt(end);
-			const range = new vscode.Range(startPos, endPos);
-			const latex = match[0].substring(config.forwardSkip, match[0].length - config.backwardSkip);
-			// console.log(`Match: ${match[0]}, match index: ${match.index}, match length: ${match[0].length}, processed: ${latex}`);
-			const hoverUri = await tex2Svg.render(latex);
-			const decoration = { range: range, hoverMessage: hoverUri.text };
+		segments = [{ text: document.getText(), offset: 0 }];
+	}
 
-			if (hoverUri.error || wrongRegEx.test(match[0])) {
+	const matchRegEx = new RegExp(config.matchReg, config.matchRegFlags);
+	const wrongUsage: vscode.DecorationOptions[] = [];
+	const correctUsage: vscode.DecorationOptions[] = [];
+
+	for (const segment of segments) {
+		let match;
+		while ((match = matchRegEx.exec(segment.text))) {
+			const latex = match.slice(1).find(g => g !== undefined);
+			if (!latex) {
+				continue;
+			}
+			const start = segment.offset + match.index;
+			const end = segment.offset + match.index + match[0].length;
+			const range = new vscode.Range(
+				document.positionAt(start),
+				document.positionAt(end)
+			);
+			const result = tex2Svg.render(latex);
+			const decoration: vscode.DecorationOptions = { range, hoverMessage: result.text };
+			if (config.inlineDisplay) {
+				decoration.renderOptions = inlineRenderOptions(result.text, range.end.character);
+			}
+
+			if (result.error) {
 				wrongUsage.push(decoration);
 			} else {
 				correctUsage.push(decoration);
 			}
 		}
-		activeEditor.setDecorations(config.wrongDecorationType, wrongUsage);
-		activeEditor.setDecorations(config.correctDecorationType, correctUsage);
 	}
 
-	function triggerUpdateDecorations() {
-		if (timeout) {
-			clearTimeout(timeout);
-			timeout = undefined;
-		}
-		timeout = setTimeout(updateDecorations, config.updateInterval);
-	}
-
-	if (activeEditor) {
-		triggerUpdateDecorations();
-	}
-
-	vscode.window.onDidChangeActiveTextEditor(editor => {
-		activeEditor = editor;
-		if (editor) {
-			triggerUpdateDecorations();
-		}
-	}, null, context.subscriptions);
-
-	vscode.workspace.onDidChangeTextDocument(event => {
-		if (activeEditor && event.document === activeEditor.document) {
-			triggerUpdateDecorations();
-		}
-	}, null, context.subscriptions);
-
+	activeEditor.setDecorations(config.wrongDecorationType, wrongUsage);
+	activeEditor.setDecorations(config.correctDecorationType, correctUsage);
 }
 
+function scheduleUpdate(delay = config.updateInterval) {
+	if (timeout) {
+		clearTimeout(timeout);
+		timeout = undefined;
+	}
+	timeout = setTimeout(updateDecorations, delay);
+}
+
+export function activate(context: vscode.ExtensionContext) {
+	tex2Svg = createTex2Svg();
+
+	scheduleUpdate();
+
+	context.subscriptions.push(
+		vscode.window.onDidChangeActiveTextEditor(editor => {
+			if (editor) {
+				scheduleUpdate();
+			}
+		}),
+
+		vscode.workspace.onDidChangeTextDocument(event => {
+			const activeEditor = vscode.window.activeTextEditor;
+			if (activeEditor && event.document === activeEditor.document) {
+				scheduleUpdate();
+			}
+		}),
+
+		vscode.workspace.onDidChangeConfiguration(event => {
+			if (event.affectsConfiguration("mathover")) {
+				config.reload();
+				tex2Svg = createTex2Svg();
+				scheduleUpdate();
+			}
+		}),
+
+		vscode.window.onDidChangeActiveColorTheme(() => {
+			tex2Svg = createTex2Svg();
+			scheduleUpdate();
+		}),
+	);
+}
